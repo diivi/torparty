@@ -107,20 +107,26 @@ io.on("connection", (socket) => {
   socket.on("joinroom", function (room) {
     if (io.sockets.adapter.rooms.has(room)) {
       socket.join(room);
+      console.log(rooms);
       let roomObj = rooms.find((roomObj) => roomObj.name === room);
       roomObj.users.push("watcher");
       console.log("joined room", room);
-      socket.to(roomObj.hostId).emit("joined room", roomObj);
+      socket.to(roomObj.hostId).emit("watcher added", roomObj);
+      socket.emit("start player", roomObj);
     } else {
       socket.emit("exception", "Room does not exist, please create it first!");
     }
   });
 
+  socket.on("first play", function (room) {
+    let roomObj = rooms.find((roomObj) => roomObj.name === room);
+    socket.to(roomObj.hostId).emit("watcher first play", roomObj.name);
+  });
+
   socket.on("set room time", function (data) {
-    console.log(data);
     let roomObj = rooms.find((roomObj) => roomObj.name === data.room);
     roomObj.currTime = data.time;
-    socket.to(currentRoom).emit("time change", roomObj.time);
+    socket.to(roomObj.name).emit("room time init", roomObj.currTime);
   });
 
   socket.on("selected", function (magnet) {
@@ -130,7 +136,9 @@ io.on("connection", (socket) => {
 
   socket.on("disconnect", function () {
     let roomObj = rooms.find((roomObj) => roomObj.hostId === socket.id);
-    rooms.splice(rooms.indexOf(roomObj), 1);
+    if (rooms.indexOf(roomObj) >= 0) {
+      rooms.splice(rooms.indexOf(roomObj), 1);
+    }
     console.log("socket disconnected");
   });
 });
