@@ -1,0 +1,105 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TorParty | Join Party</title>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@webtor/embed-sdk-js/dist/index.min.js"
+      charset="utf-8"
+      async
+    ></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+  </head>
+  <body>
+    <input type="text" name="room" placeholder="Room Name" />
+    <input type="submit" value="Search" onclick="joinRoom()" />
+    <div id="player" class="webtor" style="display: none" />
+    <script src="main.js"></script>
+    <script>
+      const io = require("socket.io-client");
+
+      const socket = io("http://localhost:3000");
+
+      curr_time = 0;
+      unsynced = true;
+      room = "";
+
+      socket.on("exception", (message) => {
+        console.log(message);
+      });
+
+      socket.on("start player", (data) => {
+        startPlayer(data.magnet);
+        room = data.name;
+      });
+
+      socket.on("room time init", (time) => {
+        console.log(time);
+        curr_time = time;
+      });
+
+      function joinRoom() {
+        if (document.querySelector("input[name=room]").value.trim()) {
+          socket.emit(
+            "joinroom",
+            document.querySelector("input[name=room]").value.trim()
+          );
+        } else {
+          alert("Please Enter Room Name");
+        }
+      }
+      function startPlayer(magnet) {
+        $(".webtor").show();
+        window.webtor.push({
+          id: "player",
+          magnet: magnet,
+          on: function (e) {
+            if (e.name == window.webtor.TORRENT_FETCHED) {
+              console.log("Torrent fetched!");
+            }
+            if (e.name == window.webtor.TORRENT_ERROR) {
+              console.log("Torrent error!");
+            }
+            if (e.name == window.webtor.CURRENT_TIME) {
+              var p = e.player;
+              if (e.data > 0) {
+                if (e.data !== curr_time && unsynced) {
+                  socket.emit("first play", room);
+                  unsynced = false;
+                  setTimeout(() => {
+                    console.log(curr_time);
+                    p.setPosition(curr_time);
+                  }, 50);
+                }
+              }
+            }
+            if (e.name == window.webtor.INITED) {
+              console.log(e.name);
+            }
+          },
+          lang: "en",
+          i18n: {
+            en: {
+              common: {
+                "prepare to play": "Joining Party",
+              },
+              stat: {
+                seeding: "Seeding",
+                waiting: "Client initialization",
+                "waiting for peers": "Waiting for peers",
+                from: "from",
+              },
+            },
+          },
+          controls: false,
+          features: {
+            settings: false,
+            embed: false,
+          },
+        });
+      }
+    </script>
+  </body>
+</html>

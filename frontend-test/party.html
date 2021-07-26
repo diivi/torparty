@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>TorParty | Make Party</title>
+    <script
+      src="https://cdn.jsdelivr.net/npm/@webtor/embed-sdk-js/dist/index.min.js"
+      charset="utf-8"
+      async
+    ></script>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.4.1/jquery.min.js"></script>
+
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <input type="text" name="movie" placeholder="Movie Name" />
+    <input type="text" name="room" placeholder="Room Name" />
+    <input type="submit" value="Search" onclick="searchKeyword()" />
+    <div class="movies"></div>
+    <div id="player" class="webtor" style="display: none" />
+    <script src="main.js"></script>
+    <script src="client.js"></script>
+    <script>
+      const io = require("socket.io-client");
+
+      const socket = io("http://localhost:3000");
+
+      socket.on("exception", (message) => {
+        console.log(message);
+      });
+
+      socket.on("watcher added", (data) => {
+        // console.log(data);
+      });
+
+      socket.on("watcher first play", (room) => {
+        socket.emit("set room time", { room: room, time: curr_time });
+      });
+
+      var magnet = "";
+      var curr_time = 0;
+
+      const searchMovie = async () => {
+        const response = await fetch("http://localhost:3000/movie", {
+          method: "POST",
+          body: JSON.stringify({
+            name: document.querySelector("input[name=movie]").value,
+            room: document.querySelector("input[name=room]").value,
+          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+        return await response.json();
+      };
+
+      function searchKeyword() {
+        if (
+          document.querySelector("input[name=room]").value.trim() &&
+          document.querySelector("input[name=movie]").value.trim()
+        ) {
+          searchMovie().then((moviesData) => {
+            console.log(moviesData);
+            if (
+              moviesData.message &&
+              (moviesData.message === "movie not found" || "name/movie empty")
+            ) {
+              console.log("no data");
+            } else {
+              const moviesList = document.createElement("div");
+              moviesData.forEach((movie) => {
+                const movieDiv = document.createElement("div");
+                const movieItem = document.createElement("p");
+                const movieImage = document.createElement("img");
+                movieImage.src = `http://localhost:3000/covers/${encodeURIComponent(
+                  movie.title_english
+                )}.png`;
+                movieImage.alt = "Loading...";
+                movieItem.innerHTML = `${movie.title_english}`;
+                movieItem.className = "movie-name";
+                movieItem.setAttribute("data-id", movie.id);
+                movieItem.setAttribute(
+                  "onclick",
+                  "getMovieData(" + movie.id + ")"
+                );
+
+                movieDiv.appendChild(movieImage);
+                movieDiv.appendChild(movieItem);
+
+                moviesList.appendChild(movieDiv);
+              });
+              document.querySelector(".movies").innerHTML =
+                moviesList.innerHTML;
+            }
+          });
+        } else {
+          alert("Please Enter Room & Movie Name");
+        }
+      }
+
+      async function getMovieData(id) {
+        const response = await fetch("http://localhost:3000/confirm", {
+          method: "POST",
+          body: JSON.stringify({
+            id: id,
+            room: document.querySelector("input[name=room]").value,
+          }),
+          headers: {
+            "Content-Type": "application/json",
+          },
+        });
+        details = await response.json();
+        if (details.message === "room already exists") {
+          console.log(details);
+        } else {
+          details.torrents.forEach((torrent) => {
+            if (torrent.quality === "720p") {
+              magnet = torrent.magnet_url;
+            }
+          });
+          if (!magnet) {
+            magnet = details.torrents[-1].magnet_url;
+          }
+          socket.emit("createroom", {
+            room: document.querySelector("input[name=room]").value.trim(),
+            magnet: magnet,
+          });
+          startPlayer(magnet);
+        }
+      }
+
+      function startPlayer(magnet) {
+        socket.emit("selected", magnet);
+        $("input[name=movie]").remove();
+        $("input[name=room]").remove();
+        $("input[type=submit]").remove();
+        $(".webtor").show();
+        window.webtor.push({
+          id: "player",
+          magnet: magnet,
+          on: function (e) {
+            if (e.name == window.webtor.TORRENT_FETCHED) {
+              console.log("Torrent fetched!");
+            }
+            if (e.name == window.webtor.TORRENT_ERROR) {
+              console.log("Torrent error!");
+            }
+            if (e.name == window.webtor.CURRENT_TIME) {
+              curr_time = e.data;
+            }
+            if (e.name == window.webtor.INITED) {
+              var p = e.player;
+            }
+          },
+          lang: "en",
+          i18n: {
+            en: {
+              common: {
+                "prepare to play": "Starting A Party",
+              },
+              stat: {
+                seeding: "Seeding",
+                waiting: "Client initialization",
+                "waiting for peers": "Waiting for peers",
+                from: "from",
+              },
+            },
+          },
+          features: {
+            settings: false,
+            embed: false,
+          },
+        });
+      }
+    </script>
+  </body>
+</html>
